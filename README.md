@@ -12,7 +12,7 @@ This is the starter code used in Boot.dev's [Learn Pub/Sub](https://learn.boot.d
 Make sure you have a RabbitMQ server running locally:
 
 ```bash
-./rabbitmq.sh
+./rabbit.sh
 ```
 
 Using separate terminal windows, you can run clients and servers:
