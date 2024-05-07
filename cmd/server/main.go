@@ -16,4 +16,6 @@ func main() {
 	}
 
 	defer connection.Close()
+
+	fmt.Println("Connection is successful")
 }
