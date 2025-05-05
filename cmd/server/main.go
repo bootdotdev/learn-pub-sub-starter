@@ -17,7 +17,6 @@ func main() {
 	conn, err := amqp.Dial(connectionString)
 	if err != nil {
 		log.Fatalf("Failed to connect to RabbitMQ: %s\n", err)
-		os.Exit(1)
 	}
 	defer conn.Close()
 
