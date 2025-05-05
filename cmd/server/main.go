@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,7 +16,7 @@ func main() {
 	connectionString := "amqp://guest:guest@localhost:5672/"
 	conn, err := amqp.Dial(connectionString)
 	if err != nil {
-		fmt.Printf("Failed to connect to RabbitMQ: %s\n", err)
+		log.Fatalf("Failed to connect to RabbitMQ: %s\n", err)
 		return
 	}
 	defer conn.Close()
