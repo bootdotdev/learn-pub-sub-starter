@@ -17,7 +17,7 @@ func main() {
 	conn, err := amqp.Dial(connectionString)
 	if err != nil {
 		log.Fatalf("Failed to connect to RabbitMQ: %s\n", err)
-		return
+		os.Exit(1)
 	}
 	defer conn.Close()
 
@@ -26,6 +26,8 @@ func main() {
 	// Create a channel to receive OS signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	defer signal.Stop(sigChan)
 
 	// Wait for a signal
 	<-sigChan
