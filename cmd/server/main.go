@@ -7,6 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -21,6 +23,22 @@ func main() {
 	defer conn.Close()
 
 	fmt.Println("Connected to RabbitMQ")
+
+	channel, err := conn.Channel()
+	if err != nil {
+		log.Fatalf("Failed to open a channel: %s\n", err)
+	}
+	defer channel.Close()
+	fmt.Println("Channel opened")
+
+	err = pubsub.PublishJSON(channel, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{
+		IsPaused: true,
+	})
+
+	if err != nil {
+		log.Fatalf("Failed to publish message: %s\n", err)
+	}
+	fmt.Println("Message published")
 
 	// Create a channel to receive OS signals
 	sigChan := make(chan os.Signal, 1)
