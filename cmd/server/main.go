@@ -33,7 +33,7 @@ func main() {
 
     fmt.Println("Successfully connected to RabbitMQ.")
 
-    // Create a channel for declaring the exchange
+    // Create a channel for declaring the exchanges
     exchCh, err := conn.Channel()
     if err != nil {
         fmt.Println("Failed to open exchange channel:", err)
@@ -44,7 +44,28 @@ func main() {
         fmt.Println("Failed to declare exchange:", err)
         return
     }
+    // Ensure the topic exchange exists
+    if err := pubsub.DeclareTopicExchange(exchCh, routing.ExchangePerilTopic); err != nil {
+        _ = exchCh.Close()
+        fmt.Println("Failed to declare topic exchange:", err)
+        return
+    }
     _ = exchCh.Close()
+
+    // Declare and bind durable game_logs queue to peril_topic exchange
+    logKey := fmt.Sprintf("%s.*", routing.GameLogSlug)
+    logCh, _, err := pubsub.DeclareAndBind(
+        conn,
+        routing.ExchangePerilTopic,
+        routing.GameLogSlug,
+        logKey,
+        pubsub.Durable,
+    )
+    if err != nil {
+        fmt.Println("Failed to declare/bind game_logs queue:", err)
+        return
+    }
+    _ = logCh.Close()
 
     // Create a channel for publishing
     ch, err := conn.Channel()
