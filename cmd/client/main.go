@@ -2,9 +2,6 @@ package main
 
 import (
     "fmt"
-    "os"
-    "os/signal"
-    "syscall"
 
     amqp "github.com/rabbitmq/amqp091-go"
 
@@ -66,10 +63,38 @@ func main() {
 
     fmt.Printf("Declared transient queue %q bound to exchange %q with key %q\n", q.Name, routing.ExchangePerilDirect, routing.PauseKey)
 
-    // Keep the client running so you can inspect the queue in RabbitMQ UI
-    sigCh := make(chan os.Signal, 1)
-    signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-    fmt.Println("Press Ctrl+C to quit the client...")
-    <-sigCh
-    fmt.Println("Client shutting down...")
+    // Initialize local game state
+    gs := gamelogic.NewGameState(username)
+
+    // Client REPL loop
+    for {
+        words := gamelogic.GetInput()
+        if len(words) == 0 {
+            continue
+        }
+        cmd := words[0]
+        switch cmd {
+        case "spawn":
+            if err := gs.CommandSpawn(words); err != nil {
+                fmt.Println(err)
+            }
+        case "move":
+            if _, err := gs.CommandMove(words); err != nil {
+                fmt.Println(err)
+            } else {
+                fmt.Println("Move successful.")
+            }
+        case "status":
+            gs.CommandStatus()
+        case "help":
+            gamelogic.PrintClientHelp()
+        case "spam":
+            fmt.Println("Spamming not allowed yet!")
+        case "quit":
+            gamelogic.PrintQuit()
+            return
+        default:
+            fmt.Println("Unrecognized command. Type 'help' for options.")
+        }
+    }
 }
