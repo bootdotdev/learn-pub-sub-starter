@@ -50,6 +50,19 @@ func DeclareDirectExchange(ch *amqp.Channel, exchange string) error {
     )
 }
 
+// DeclareTopicExchange ensures a durable topic exchange exists.
+func DeclareTopicExchange(ch *amqp.Channel, exchange string) error {
+    return ch.ExchangeDeclare(
+        exchange, // name
+        "topic",  // kind
+        true,     // durable
+        false,    // autoDelete
+        false,    // internal
+        false,    // noWait
+        nil,      // args
+    )
+}
+
 // DeclareAndBind declares a queue (durable or transient) and binds it to an exchange with a routing key.
 // It returns the channel and declared queue. The caller is responsible for closing the channel.
 func DeclareAndBind(
