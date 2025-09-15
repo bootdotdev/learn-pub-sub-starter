@@ -17,3 +17,14 @@
   - Subscribed clients to other players' moves on `peril_topic` using queue `army_moves.<username>` bound to key `army_moves.*` (transient) via `pubsub.SubscribeJSON[gamelogic.ArmyMove]`.
   - Added `handlerMove(gs *gamelogic.GameState) func(gamelogic.ArmyMove)`; calls `gs.HandleMove` and defers a new prompt.
   - Published moves after `move` command to `peril_topic` with routing key `army_moves.<username>` using `pubsub.PublishJSON`, logging success on publish.
+
+## 2025-09-15 CH5-L2: Assignment
+
+- internal/pubsub/pubsub.go
+  - Updated `SubscribeJSON` handler signature to return an `AckType` (`Ack`, `NackRequeue`, `NackDiscard`).
+  - Added `AckType` enum and switched consumer goroutine to Ack/Nack based on handler result.
+  - Added log statements on each Ack/Nack (including unmarshal errors which discard).
+
+- cmd/client/main.go
+  - Updated `handlerPause` to return `pubsub.AckType` and always `Ack` after handling.
+  - Updated `handlerMove` to return `pubsub.AckType`: `Ack` on safe/make-war outcomes; `NackDiscard` on same-player or any other outcome.
