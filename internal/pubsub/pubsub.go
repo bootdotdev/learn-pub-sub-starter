@@ -7,12 +7,12 @@ import (
     amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// simpleQueueType is a minimal enum to represent durable vs transient queues.
-type simpleQueueType int
+// SimpleQueueType is a minimal enum to represent durable vs transient queues.
+type SimpleQueueType int
 
 const (
     // Durable represents a durable queue (survives broker restarts, not auto-deleted).
-    Durable simpleQueueType = iota
+    Durable SimpleQueueType = iota
     // Transient represents a transient, exclusive, auto-deleting queue.
     Transient
 )
@@ -70,7 +70,7 @@ func DeclareAndBind(
     exchange,
     queueName,
     key string,
-    queueType simpleQueueType,
+    queueType SimpleQueueType,
 ) (*amqp.Channel, amqp.Queue, error) {
     ch, err := conn.Channel()
     if err != nil {
@@ -106,4 +106,50 @@ func DeclareAndBind(
     }
 
     return ch, q, nil
+}
+
+// SubscribeJSON declares/binds the queue and starts consuming JSON messages into T.
+// It spawns a goroutine that unmarshals, invokes the handler, and acks each message.
+func SubscribeJSON[T any](
+    conn *amqp.Connection,
+    exchange,
+    queueName,
+    key string,
+    queueType SimpleQueueType,
+    handler func(T),
+) error {
+    ch, q, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
+    if err != nil {
+        return err
+    }
+
+    // Note: caller is not closing channel here; it must remain open for consumption.
+    deliveries, err := ch.Consume(
+        q.Name, // queue
+        "",     // consumer (auto-generated)
+        false,   // auto-ack (false; we manually ack after handling)
+        false,   // exclusive
+        false,   // no-local
+        false,   // no-wait
+        nil,     // args
+    )
+    if err != nil {
+        _ = ch.Close()
+        return err
+    }
+
+    go func() {
+        for d := range deliveries {
+            var msg T
+            if err := json.Unmarshal(d.Body, &msg); err == nil {
+                handler(msg)
+                _ = d.Ack(false)
+            } else {
+                // On unmarshal error, reject without requeue to avoid poison messages.
+                _ = d.Nack(false, false)
+            }
+        }
+    }()
+
+    return nil
 }
