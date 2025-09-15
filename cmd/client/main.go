@@ -46,25 +46,22 @@ func main() {
     }
     _ = exchCh.Close()
 
-    // Declare and bind a transient, exclusive queue for this user
-    queueName := fmt.Sprintf("%s.%s", routing.PauseKey, username)
-    ch, q, err := pubsub.DeclareAndBind(
-        conn,
-        routing.ExchangePerilDirect, // exchange
-        queueName,                   // queueName: pause.username
-        routing.PauseKey,            // routing key
-        pubsub.Transient,            // queueType
-    )
-    if err != nil {
-        fmt.Println("Failed to declare/bind queue:", err)
-        return
-    }
-    defer func() { _ = ch.Close() }()
-
-    fmt.Printf("Declared transient queue %q bound to exchange %q with key %q\n", q.Name, routing.ExchangePerilDirect, routing.PauseKey)
-
     // Initialize local game state
     gs := gamelogic.NewGameState(username)
+
+    // Subscribe to pause messages for this user
+    queueName := fmt.Sprintf("%s.%s", routing.PauseKey, username)
+    if err := pubsub.SubscribeJSON[routing.PlayingState](
+        conn,
+        routing.ExchangePerilDirect,
+        queueName,        // pause.username
+        routing.PauseKey, // routing key
+        pubsub.Transient,
+        handlerPause(gs),
+    ); err != nil {
+        fmt.Println("Failed to subscribe to pause messages:", err)
+        return
+    }
 
     // Client REPL loop
     for {
@@ -96,5 +93,13 @@ func main() {
         default:
             fmt.Println("Unrecognized command. Type 'help' for options.")
         }
+    }
+}
+
+// handlerPause returns a handler that pauses/resumes the local game state.
+func handlerPause(gs *gamelogic.GameState) func(routing.PlayingState) {
+    return func(ps routing.PlayingState) {
+        defer fmt.Print("> ")
+        gs.HandlePause(ps)
     }
 }
