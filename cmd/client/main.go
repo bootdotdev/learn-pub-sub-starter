@@ -63,6 +63,30 @@ func main() {
         return
     }
 
+    // Subscribe to other players' moves using a topic binding
+    // Queue: army_moves.username, Key: army_moves.* on peril_topic
+    movesQueue := fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, username)
+    movesKey := fmt.Sprintf("%s.*", routing.ArmyMovesPrefix)
+    if err := pubsub.SubscribeJSON[gamelogic.ArmyMove](
+        conn,
+        routing.ExchangePerilTopic,
+        movesQueue,
+        movesKey,
+        pubsub.Transient,
+        handlerMove(gs),
+    ); err != nil {
+        fmt.Println("Failed to subscribe to army move messages:", err)
+        return
+    }
+
+    // Create a publishing channel for client-initiated messages
+    pubCh, err := conn.Channel()
+    if err != nil {
+        fmt.Println("Failed to open publishing channel:", err)
+        return
+    }
+    defer func() { _ = pubCh.Close() }()
+
     // Client REPL loop
     for {
         words := gamelogic.GetInput()
@@ -76,10 +100,16 @@ func main() {
                 fmt.Println(err)
             }
         case "move":
-            if _, err := gs.CommandMove(words); err != nil {
+            if mv, err := gs.CommandMove(words); err != nil {
                 fmt.Println(err)
             } else {
-                fmt.Println("Move successful.")
+                // Publish the move to peril_topic with routing key army_moves.username
+                rk := fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, gs.GetUsername())
+                if err := pubsub.PublishJSON(pubCh, routing.ExchangePerilTopic, rk, mv); err != nil {
+                    fmt.Println("Failed to publish move:", err)
+                } else {
+                    fmt.Println("Move published successfully.")
+                }
             }
         case "status":
             gs.CommandStatus()
@@ -101,5 +131,13 @@ func handlerPause(gs *gamelogic.GameState) func(routing.PlayingState) {
     return func(ps routing.PlayingState) {
         defer fmt.Print("> ")
         gs.HandlePause(ps)
+    }
+}
+
+// handlerMove returns a handler that processes incoming ArmyMove messages.
+func handlerMove(gs *gamelogic.GameState) func(gamelogic.ArmyMove) {
+    return func(mv gamelogic.ArmyMove) {
+        defer fmt.Print("> ")
+        gs.HandleMove(mv)
     }
 }
