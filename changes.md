@@ -1,4 +1,4 @@
- -s# Changelog
+# Changelog
 
 ## 2025-09-15 CH4-L1
 
