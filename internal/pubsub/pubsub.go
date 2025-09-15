@@ -3,6 +3,7 @@ package pubsub
 import (
     "context"
     "encoding/json"
+    "log"
 
     amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -116,7 +117,7 @@ func SubscribeJSON[T any](
     queueName,
     key string,
     queueType SimpleQueueType,
-    handler func(T),
+    handler func(T) AckType,
 ) error {
     ch, q, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
     if err != nil {
@@ -142,14 +143,36 @@ func SubscribeJSON[T any](
         for d := range deliveries {
             var msg T
             if err := json.Unmarshal(d.Body, &msg); err == nil {
-                handler(msg)
-                _ = d.Ack(false)
+                switch handler(msg) {
+                case Ack:
+                    _ = d.Ack(false)
+                    log.Printf("SubscribeJSON: Acked message from queue %s", q.Name)
+                case NackRequeue:
+                    _ = d.Nack(false, true)
+                    log.Printf("SubscribeJSON: Nack (requeue) message from queue %s", q.Name)
+                case NackDiscard:
+                    _ = d.Nack(false, false)
+                    log.Printf("SubscribeJSON: Nack (discard) message from queue %s", q.Name)
+                default:
+                    _ = d.Nack(false, false)
+                    log.Printf("SubscribeJSON: Unknown ack type, Nack (discard) message from queue %s", q.Name)
+                }
             } else {
                 // On unmarshal error, reject without requeue to avoid poison messages.
                 _ = d.Nack(false, false)
+                log.Printf("SubscribeJSON: Unmarshal error, Nack (discard) message from queue %s: %v", q.Name, err)
             }
         }
     }()
 
     return nil
 }
+
+// AckType determines how a consumed message should be acknowledged.
+type AckType int
+
+const (
+    Ack AckType = iota
+    NackRequeue
+    NackDiscard
+)
