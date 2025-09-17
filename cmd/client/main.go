@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
@@ -88,7 +89,7 @@ func main() {
 		warQueue,
 		warKey,
 		pubsub.Durable,
-		handlerWar(gs),
+		handlerWar(gs, conn),
 	); err != nil {
 		fmt.Println("Failed to subscribe to war messages:", err)
 		return
@@ -186,22 +187,51 @@ func handlerMove(gs *gamelogic.GameState, conn *amqp.Connection) func(gamelogic.
 	}
 }
 
-func handlerWar(gs *gamelogic.GameState) func(gamelogic.RecognitionOfWar) pubsub.AckType {
+func handlerWar(gs *gamelogic.GameState, conn *amqp.Connection) func(gamelogic.RecognitionOfWar) pubsub.AckType {
 	return func(rw gamelogic.RecognitionOfWar) pubsub.AckType {
 		defer fmt.Print("> ")
-		outcome, _, _ := gs.HandleWar(rw)
+		outcome, winner, loser := gs.HandleWar(rw)
+
+		var logMessage string
 		switch outcome {
 		case gamelogic.WarOutcomeNotInvolved:
 			return pubsub.NackRequeue
 		case gamelogic.WarOutcomeNoUnits:
 			return pubsub.NackDiscard
 		case gamelogic.WarOutcomeOpponentWon,
-			gamelogic.WarOutcomeYouWon,
-			gamelogic.WarOutcomeDraw:
-			return pubsub.Ack
+			gamelogic.WarOutcomeYouWon:
+			logMessage = fmt.Sprintf("%s won a war against %s", winner, loser)
+		case gamelogic.WarOutcomeDraw:
+			logMessage = fmt.Sprintf("A war between %s and %s resulted in a draw", winner, loser)
 		default:
 			fmt.Printf("Unknown war outcome: %v\n", outcome)
 			return pubsub.NackDiscard
 		}
+
+		if logMessage != "" {
+			if err := publishGameLog(conn, rw.Attacker.Username, logMessage); err != nil {
+				fmt.Println("Failed to publish war log:", err)
+				return pubsub.NackRequeue
+			}
+		}
+
+		return pubsub.Ack
 	}
+}
+
+func publishGameLog(conn *amqp.Connection, username, message string) error {
+	ch, err := conn.Channel()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = ch.Close() }()
+
+	logEntry := routing.GameLog{
+		CurrentTime: time.Now().UTC(),
+		Message:     message,
+		Username:    username,
+	}
+
+	rk := fmt.Sprintf("%s.%s", routing.GameLogSlug, username)
+	return pubsub.PublishGob(ch, routing.ExchangePerilTopic, rk, logEntry)
 }

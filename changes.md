@@ -44,3 +44,11 @@
 - cmd/client/main.go
   - Published `RecognitionOfWar` events to `peril_topic` when moves trigger war, requeuing the move so other clients react.
   - Added a durable war subscription that processes shared war messages with outcome-based Ack/Nack behavior.
+
+## 2025-09-15 CH6-L2: Assignment
+
+- internal/pubsub/pubsub.go
+  - Added `PublishGob` helper to send gob-encoded messages with the appropriate content type.
+
+- cmd/client/main.go
+  - Logged war outcomes by publishing gob-encoded `GameLog` entries and Ack/Nack based on publish success.

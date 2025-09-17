@@ -1,7 +1,9 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"log"
@@ -36,6 +38,26 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        b,
+		},
+	)
+}
+
+// PublishGob publishes a gob-encoded value to the given exchange and routing key.
+func PublishGob[T any](ch *amqp.Channel, exchange, key string, val T) error {
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(val); err != nil {
+		return err
+	}
+
+	return ch.PublishWithContext(
+		context.Background(), // ctx
+		exchange,             // exchange
+		key,                  // key
+		false,                // mandatory
+		false,                // immediate
+		amqp.Publishing{
+			ContentType: "application/gob",
+			Body:        buf.Bytes(),
 		},
 	)
 }
