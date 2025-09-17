@@ -28,3 +28,13 @@
 - cmd/client/main.go
   - Updated `handlerPause` to return `pubsub.AckType` and always `Ack` after handling.
   - Updated `handlerMove` to return `pubsub.AckType`: `Ack` on safe/make-war outcomes; `NackDiscard` on same-player or any other outcome.
+
+## 2025-09-15 CH5-L3: Assignment
+
+- internal/routing/routing.go
+  - Added `ExchangePerilDeadLetters` constant for the dead letter exchange name.
+
+- internal/pubsub/pubsub.go
+  - Passed an `amqp.Table` with `x-dead-letter-exchange` when declaring queues so RabbitMQ routes failed messages to the dead letter exchange.
+  - Ensured the dead letter exchange exists and gracefully recreates queues if they were previously declared without the dead letter configuration.
+  - Declared/bound the shared `peril_dlq` queue so failed messages land in the expected place.
