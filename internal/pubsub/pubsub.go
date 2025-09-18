@@ -178,22 +178,21 @@ func DeclareAndBind(
 	return ch, q, nil
 }
 
-// SubscribeJSON declares/binds the queue and starts consuming JSON messages into T.
-// It spawns a goroutine that unmarshals, invokes the handler, and acks each message.
-func SubscribeJSON[T any](
+func subscribe[T any](
 	conn *amqp.Connection,
 	exchange,
 	queueName,
 	key string,
 	queueType SimpleQueueType,
 	handler func(T) AckType,
+	unmarshaller func([]byte) (T, error),
+	subscriber string,
 ) error {
 	ch, q, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
 	if err != nil {
 		return err
 	}
 
-	// Note: caller is not closing channel here; it must remain open for consumption.
 	deliveries, err := ch.Consume(
 		q.Name, // queue
 		"",     // consumer (auto-generated)
@@ -210,31 +209,82 @@ func SubscribeJSON[T any](
 
 	go func() {
 		for d := range deliveries {
-			var msg T
-			if err := json.Unmarshal(d.Body, &msg); err == nil {
-				switch handler(msg) {
-				case Ack:
-					_ = d.Ack(false)
-					log.Printf("SubscribeJSON: Acked message from queue %s", q.Name)
-				case NackRequeue:
-					_ = d.Nack(false, true)
-					log.Printf("SubscribeJSON: Nack (requeue) message from queue %s", q.Name)
-				case NackDiscard:
-					_ = d.Nack(false, false)
-					log.Printf("SubscribeJSON: Nack (discard) message from queue %s", q.Name)
-				default:
-					_ = d.Nack(false, false)
-					log.Printf("SubscribeJSON: Unknown ack type, Nack (discard) message from queue %s", q.Name)
-				}
-			} else {
-				// On unmarshal error, reject without requeue to avoid poison messages.
+			msg, err := unmarshaller(d.Body)
+			if err != nil {
 				_ = d.Nack(false, false)
-				log.Printf("SubscribeJSON: Unmarshal error, Nack (discard) message from queue %s: %v", q.Name, err)
+				log.Printf("%s: Unmarshal error, Nack (discard) message from queue %s: %v", subscriber, q.Name, err)
+				continue
+			}
+
+			switch handler(msg) {
+			case Ack:
+				_ = d.Ack(false)
+				log.Printf("%s: Acked message from queue %s", subscriber, q.Name)
+			case NackRequeue:
+				_ = d.Nack(false, true)
+				log.Printf("%s: Nack (requeue) message from queue %s", subscriber, q.Name)
+			case NackDiscard:
+				_ = d.Nack(false, false)
+				log.Printf("%s: Nack (discard) message from queue %s", subscriber, q.Name)
+			default:
+				_ = d.Nack(false, false)
+				log.Printf("%s: Unknown ack type, Nack (discard) message from queue %s", subscriber, q.Name)
 			}
 		}
 	}()
 
 	return nil
+}
+
+// SubscribeJSON declares/binds the queue and starts consuming JSON messages into T.
+// It spawns a goroutine that unmarshals, invokes the handler, and acks each message.
+func SubscribeJSON[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	queueType SimpleQueueType,
+	handler func(T) AckType,
+) error {
+	return subscribe(
+		conn,
+		exchange,
+		queueName,
+		key,
+		queueType,
+		handler,
+		func(body []byte) (T, error) {
+			var msg T
+			return msg, json.Unmarshal(body, &msg)
+		},
+		"SubscribeJSON",
+	)
+}
+
+// SubscribeGob declares/binds the queue and starts consuming gob messages into T.
+// It mirrors SubscribeJSON but decodes gob payloads.
+func SubscribeGob[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	queueType SimpleQueueType,
+	handler func(T) AckType,
+) error {
+	return subscribe(
+		conn,
+		exchange,
+		queueName,
+		key,
+		queueType,
+		handler,
+		func(body []byte) (T, error) {
+			var msg T
+			dec := gob.NewDecoder(bytes.NewReader(body))
+			return msg, dec.Decode(&msg)
+		},
+		"SubscribeGob",
+	)
 }
 
 // AckType determines how a consumed message should be acknowledged.
