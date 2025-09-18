@@ -193,7 +193,7 @@ func subscribe[T any](
 		return err
 	}
 
-	if err := ch.Qos(1, 0, false); err != nil {
+	if err := ch.Qos(10, 0, false); err != nil {
 		_ = ch.Close()
 		return err
 	}
