@@ -193,6 +193,11 @@ func subscribe[T any](
 		return err
 	}
 
+	if err := ch.Qos(1, 0, false); err != nil {
+		_ = ch.Close()
+		return err
+	}
+
 	deliveries, err := ch.Consume(
 		q.Name, // queue
 		"",     // consumer (auto-generated)
