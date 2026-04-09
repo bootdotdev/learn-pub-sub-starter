@@ -28,13 +28,17 @@ func main() {
 		log.Fatalf("could not create a new channel: %v", err)
 	}
 
-	_, _, err = pubsub.DeclareAndBind(
+	err = pubsub.SubscribeGob(
 		connection,
 		routing.ExchangePerilTopic,
 		routing.GameLogSlug,
-		"game_logs.*",
+		routing.GameLogSlug+".*",
 		pubsub.Durable,
+		handlerLogs(),
 	)
+	if err != nil {
+		log.Fatalf("could not subscribe to logs: %v", err)
+	}
 
 	gamelogic.PrintServerHelp()
 

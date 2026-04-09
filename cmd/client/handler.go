@@ -117,3 +117,15 @@ func publishGameLog(ch *amqp.Channel, username string, message string) error {
 	}
 	return nil
 }
+
+func handlerLogs() func(routing.GameLog) pubsub.AckType {
+	return func(gl routing.GameLog) pubsub.AckType {
+		defer fmt.Print("> ")
+		err := gamelogic.WriteLog(gl)
+		if err != nil {
+			// what ack type means "failed, try again later"?
+			return pubsub.NackRequeue
+		}
+		return pubsub.Ack
+	}
+}
