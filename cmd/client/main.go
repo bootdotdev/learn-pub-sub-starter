@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 
 	"github.com/anand-anshul/peril/internal/gamelogic"
 	"github.com/anand-anshul/peril/internal/pubsub"
@@ -71,7 +72,8 @@ loop:
 
 		switch first {
 		case "spawn":
-			err := gameState.CommandSpawn(words)
+
+			err = gameState.CommandSpawn(words)
 			if err != nil {
 				log.Println(err)
 			}
@@ -96,7 +98,27 @@ loop:
 			gamelogic.PrintClientHelp()
 
 		case "spam":
-			fmt.Println("Spamming not allowed yet!")
+			if len(words) != 2 {
+				continue
+			}
+			second := words[1]
+			num, err := strconv.Atoi(second)
+			if err != nil {
+				fmt.Println("Error:", err)
+				return
+			}
+			for range num {
+				malLog := gamelogic.GetMaliciousLog()
+
+				err := publishGameLog(
+					channel,
+					username,
+					malLog,
+				)
+				if err != nil {
+					log.Println(err)
+				}
+			}
 
 		case "quit":
 			gamelogic.PrintQuit()
