@@ -23,20 +23,43 @@ func main() {
 	defer connection.Close()
 	fmt.Println("Peril game client connected to RabbitMQ!")
 
+	channel, err := connection.Channel()
+	if err != nil {
+		log.Fatalf("could not create a new channel: %v", err)
+	}
+
 	username, err := gamelogic.ClientWelcome()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	_, _, err = pubsub.DeclareAndBind(
+	gameState := gamelogic.NewGameState(username)
+	err = pubsub.SubscribeJSON(
 		connection,
 		routing.ExchangePerilDirect,
 		routing.PauseKey+"."+username,
 		routing.PauseKey,
 		pubsub.Transient,
+		handlerPause(gameState),
 	)
 
-	gameState := gamelogic.NewGameState(username)
+	err = pubsub.SubscribeJSON(
+		connection,
+		routing.ExchangePerilTopic,
+		routing.ArmyMovesPrefix+"."+username,
+		routing.ArmyMovesPrefix+".*",
+		pubsub.Transient,
+		handlerMove(gameState, channel),
+	)
+
+	err = pubsub.SubscribeJSON(
+		connection,
+		routing.ExchangePerilTopic,
+		routing.WarRecognitionsPrefix,
+		routing.WarRecognitionsPrefix+".*",
+		pubsub.Durable,
+		handlerWar(gameState, channel),
+	)
 
 loop:
 	for {
@@ -58,6 +81,13 @@ loop:
 
 				log.Printf("move is successful to: %s", mv.ToLocation)
 			}
+			pubsub.PublishJSON(
+				channel,
+				routing.ExchangePerilTopic,
+				routing.ArmyMovesPrefix+"."+username,
+				mv,
+			)
+			log.Println("move was published successfully")
 
 		case "status":
 			gameState.CommandStatus()
